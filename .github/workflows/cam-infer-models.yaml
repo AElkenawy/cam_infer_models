@@ -1,0 +1,138 @@
+name: "cam_infer_models"
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened, closed ]
+  release:
+    types: [ published, created, edited ]
+  workflow_dispatch:
+    
+
+jobs:
+  infer_models:
+    permissions:
+      contents: read
+      pull-requests: write
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+          persist-credentials: false
+
+      - name: Fetch cam_infer_models
+        working-directory: ${{github.workspace}}
+        run: |
+          git clone https://github.com/AElkenawy/cam_infer_models.git
+          cd cam_infer_models
+          git submodule update --init --recursive
+      
+      - name: Install runtime packages
+        run: |
+          sudo apt-get -o DPkg::Lock::Timeout=1200 -y update
+          sudo apt-get -o DPkg::Lock::Timeout=1200 -y install \
+            \
+            libspdlog-dev \
+            \
+            cmake g++ git unzip \
+            \
+            libusb-1.0-0 libgtk-3-dev libtbb-dev libtbbmalloc2
+
+          sudo apt-get -o DPkg::Lock::Timeout=1200 -y install \
+            build-essential autoconf libtool pkg-config
+ 
+            
+          cmake --version
+          gcc --version
+
+      - name: Cache OpenVINO
+        id: cache-openvino
+        uses: actions/cache@v4
+        with:
+          key: openvino-2022.3.2
+          path: |
+            ${{ github.workspace }}/l_openvino_toolkit_ubuntu20_2022.3.2
+
+      - name: Install openvino
+        if: steps.cache-opencv.outputs.cache-hit != 'true'
+        working-directory: ${{github.workspace}}
+        run: |
+          wget https://storage.openvinotoolkit.org/repositories/openvino/packages/2022.3.2/linux/l_openvino_toolkit_ubuntu20_2022.3.2.9279.e2c7e4d7b4d_x86_64.tgz
+          tar -xvzf l_openvino_toolkit_ubuntu20_2022.3.2.9279.e2c7e4d7b4d_x86_64.tgz
+          mv l_openvino_toolkit_ubuntu20_2022.3.2.9279.e2c7e4d7b4d_x86_64 l_openvino_toolkit_ubuntu20_2022.3.2
+          cd l_openvino_toolkit_ubuntu20_2022.3.2
+          sudo -E ./install_dependencies/install_openvino_dependencies.sh
+          source ./setupvars.sh
+          echo "OpenVINO environment sourced"
+      
+
+      - name: Cache opencv
+        id: cache-opencv
+        uses: actions/cache@v4
+        with:
+          key: ${{ matrix.os }}-opencv
+          path: |
+            ${{github.workspace}}/opencv/buildDir/staging/release/*
+
+      - name: Build opencv
+        if: steps.cache-opencv.outputs.cache-hit != 'true'
+        working-directory: ${{github.workspace}}
+        run: |
+          git clone https://github.com/opencv/opencv.git
+          git clone https://github.com/opencv/opencv_contrib.git
+          git -C opencv checkout 4.x
+          mkdir -p ${{github.workspace}}/build/opencv
+          PKG_CONFIG_PATH=${{ github.workspace }}/opencv/buildDir/staging/release/lib/pkgconfig \
+          CC=/usr/bin/clang CXX=/usr/bin/clang++ \
+          cmake \
+            -S ${{ github.workspace }}/opencv \
+            -B ${{ github.workspace }}/build/opencv \
+            -D CMAKE_BUILD_TYPE=Release \
+            -D CMAKE_STAGING_PREFIX=${{ github.workspace }}/build/staging/usr/local \
+            -D CMAKE_INSTALL_PREFIX=/usr/local \
+            -D BUILD_NUMBER=${GITHUB_RUN_ID} \
+            -D CMAKE_VERBOSE_MAKEFILE=ON \
+            \
+            -D WITH_OPENVINO=ON \
+            -D OPENCV_GENERATE_PKGCONFIG=ON \
+            -D OPENCV_EXTRA_MODULES_PATH=${{ github.workspace }}/opencv_contrib/modules \
+            -D OpenVINO_DIR=${{ github.workspace }}/l_openvino_toolkit_ubuntu20_2022.3.2/runtime/cmake \
+            -D CMAKE_PREFIX_PATH="${{ github.workspace }}/l_openvino_toolkit_ubuntu20_2022.3.2/runtime/cmake" \
+            \
+            -D BUILD_opencv_gapi=OFF \
+            -D BUILD_opencv_gapi_samples=OFF \
+            -D BUILD_EXAMPLES=ON
+          cmake --build ${{ github.workspace }}/build/opencv -- -j4
+
+      - name: Cache grpc
+        id: cache-grpc
+        uses: actions/cache@v4
+        with:
+          key: ${{ matrix.os }}-grpc
+          path: |
+            ${{github.workspace}}/grpc/buildDir/staging/release/*
+
+      - name: Build grpc
+        if: steps.cache-grpc.outputs.cache-hit != 'true'
+        working-directory: ${{github.workspace}}
+        run: |
+          git clone --recurse-submodules -b v1.74.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc.git
+          mkdir -p ${{github.workspace}}/build/grpc
+          PKG_CONFIG_PATH=${{ github.workspace }}/grpc/buildDir/staging/release/lib/pkgconfig \
+          CC=/usr/bin/clang CXX=/usr/bin/clang++ \
+          cmake \
+            -S ${{ github.workspace }}/grpc \
+            -B ${{ github.workspace }}/build/grpc \
+            -D gRPC_INSTALL=ON \
+            -D gRPC_BUILD_TESTS=OFF \
+            -D CMAKE_CXX_STANDARD=17 \
+            -D CMAKE_INSTALL_PREFIX=${{ github.workspace }}/install/grpc
+
+          cmake --build ${{ github.workspace }}/build/grpc -- -j4
+          cmake --install ${{ github.workspace }}/build/grpc
