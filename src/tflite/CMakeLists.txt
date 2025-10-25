@@ -6,14 +6,14 @@ if (NOT DEFINED TFLITE_ROOT)
     message(FATAL_ERROR "TFLITE_ROOT is not defined. Please set TFLITE_ROOT to the path where TensorFlow Lite is built.")
 endif ()
 
-if (NOT DEFINED TFLITE_LIB_PATH)
-    message(FATAL_ERROR "TFLITE_LIB_PATH is not defined. Please set TFLITE_LIB_PATH to the path where libtensorflow-lite.so is located.")
+if (NOT DEFINED TFLITE_LIBRARY)
+    message(FATAL_ERROR "TFLITE_LIBRARY is not defined. Please set TFLITE_LIBRARY to the absolute path of libtensorflow-lite.so.")
 endif ()
 
 #
-# Shared library for tflite detection
+# tflite detection library
 #
-add_library(tflite_detection SHARED
+add_library(tflite_detection STATIC
         objectDetection_tflite.cc
         ../grpc_client.cc
 )
@@ -26,5 +26,5 @@ target_link_libraries(tflite_detection
         PkgConfig::OpenCV
         PkgConfig::PIPEWIRE
         spdlog::spdlog
-        ${TFLITE_LIB_PATH}/libtensorflowlite.so
+        ${TFLITE_LIBRARY}
 )

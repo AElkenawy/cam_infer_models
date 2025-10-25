@@ -28,10 +28,10 @@ add_subdirectory(camera_idl)
 include_directories(include)
 
 add_subdirectory(src/yolo)
-# TODO add_subdirectory(src/tflite)
+add_subdirectory(src/tflite)
 
 #
-# Binary executables
+# YOLO
 #
 
 add_executable(filter_g.yolo src/filter_g.cc)
@@ -44,8 +44,13 @@ endif ()
 
 install(TARGETS filter_g.yolo DESTINATION bin)
 
-# TODO add_executable(filter_g.tflite src/filter_g.cc)
 
-# TODO target_link_libraries(filter_g.tflite PUBLIC tflite_detection)
+#
+# Tensorflow Lite
+#
 
-# TODO install(TARGETS filter_g.tflite DESTINATION bin)
+add_executable(filter_g.tflite src/filter_g.cc)
+
+target_link_libraries(filter_g.tflite PUBLIC tflite_detection)
+
+install(TARGETS filter_g.tflite DESTINATION bin)
