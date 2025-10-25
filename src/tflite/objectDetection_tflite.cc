@@ -269,7 +269,7 @@ void detectobjects_worker_thread(AsyncDetectionData* data) {
 
     cv::Size originalSize = img.size();
 
-    std::lock_guard< lock(tensor_mutex);
+    std::lock_guard lock(tensor_mutex);
 
     auto& interp = get_interpreter();
 
