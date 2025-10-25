@@ -7,7 +7,7 @@ find_package(PkgConfig REQUIRED)
 #
 # OpenCV
 #
-pkg_check_modules(OpenCV IMPORTED_TARGET opencv REQUIRED)
+pkg_check_modules(OpenCV IMPORTED_TARGET opencv4 REQUIRED)
 
 #
 # PipeWire and SPA
