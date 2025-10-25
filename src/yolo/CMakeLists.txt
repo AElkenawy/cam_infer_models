@@ -1,8 +1,8 @@
 
 #
-# Shared library for YOLO detection
+# YOLO detection library
 #
-add_library(yolo_detection SHARED
+add_library(yolo_detection STATIC
         objectDetection2D.cc
         ../grpc_client.cc
 )

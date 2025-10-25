@@ -42,6 +42,10 @@ if (WITH_CUDA)
     target_link_libraries(filter_g.yolo CUDA::cudart)
 endif ()
 
+install(TARGETS filter_g.yolo DESTINATION bin)
+
 # TODO add_executable(filter_g.tflite src/filter_g.cc)
 
 # TODO target_link_libraries(filter_g.tflite PUBLIC tflite_detection)
+
+# TODO install(TARGETS filter_g.tflite DESTINATION bin)
