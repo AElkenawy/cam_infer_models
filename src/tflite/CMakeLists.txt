@@ -26,5 +26,5 @@ target_link_libraries(tflite_detection
         PkgConfig::OpenCV
         PkgConfig::PIPEWIRE
         spdlog::spdlog
-        ${TFLITE_LIBRARY}
+        ${TFLITE_LIBRARY} -v
 )

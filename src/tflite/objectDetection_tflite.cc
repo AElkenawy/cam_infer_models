@@ -15,13 +15,10 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 
-#include <tensorflow/lite/examples/label_image/get_top_n.h>
-#include <tensorflow/lite/interpreter.h>
 #include <tensorflow/lite/kernels/register.h>
 #include <tensorflow/lite/model.h>
 #include <tensorflow/lite/string_util.h>
 
-#include "dataStructures.h"
 #include "interface.h"
 
 bool tensor_loaded = false;
