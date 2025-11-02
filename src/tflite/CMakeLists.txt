@@ -18,7 +18,10 @@ add_library(tflite_detection STATIC
         ../grpc_client.cc
 )
 
-target_include_directories(tflite_detection PRIVATE ${TFLITE_ROOT})
+target_include_directories(tflite_detection PRIVATE 
+        ${TFLITE_ROOT}
+        ${TFLITE_ROOT}/tensorflow/lite/build/flatbuffers/include
+)
 
 target_link_libraries(tflite_detection
         PUBLIC
