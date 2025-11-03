@@ -130,6 +130,64 @@ static void on_stream_state_changed(void* data,
   }
 }
 
+static void on_capture_param_changed(void* data, uint32_t id,
+                                     const struct spa_pod* param) {
+  auto impl = static_cast<struct impl*>(data);
+  struct spa_video_info_raw format = SPA_VIDEO_INFO_RAW_INIT(SPA_VIDEO_FORMAT_UNKNOWN);
+  uint32_t size;
+  const struct spa_pod* params[2];
+  uint8_t buffer[1024];
+  struct spa_pod_builder b{};
+
+  if (param == nullptr || id != SPA_PARAM_Format)
+    return;
+
+  pw_log_info("format changed");
+  spa_format_video_raw_parse(param, &format);
+  frame_width = format.size.width;
+  frame_height = format.size.height;
+
+  size = SPA_ROUND_UP_N(format.size.width * format.size.height * YUY2_BYTES_PER_PIXEL, 4);
+
+  // Configure buffers for the capture stream
+  spa_pod_builder_init(&b, buffer, sizeof(buffer));
+
+  params[0] = static_cast<const spa_pod*>(spa_pod_builder_add_object(&b,
+      SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
+      SPA_PARAM_BUFFERS_buffers,  SPA_POD_CHOICE_RANGE_Int(DEFAULT_BUFFERS, MIN_BUFFERS, MAX_BUFFERS),
+      SPA_PARAM_BUFFERS_blocks,   SPA_POD_Int(1),
+      SPA_PARAM_BUFFERS_size,     SPA_POD_Int(size),
+      SPA_PARAM_BUFFERS_dataType, SPA_POD_CHOICE_FLAGS_Int(1<<SPA_DATA_MemFd)));
+
+  pw_stream_update_params(impl->capture, params, 1);
+
+  // Forward exact format and buffers to the output streams
+  spa_pod_builder_init(&b, buffer, sizeof(buffer));
+
+  params[0] = spa_format_video_raw_build(&b, SPA_PARAM_EnumFormat, &format);
+  params[1] = static_cast<const spa_pod*>(spa_pod_builder_add_object(&b,
+      SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
+      SPA_PARAM_BUFFERS_buffers,  SPA_POD_CHOICE_RANGE_Int(DEFAULT_BUFFERS, MIN_BUFFERS, MAX_BUFFERS),
+      SPA_PARAM_BUFFERS_blocks,   SPA_POD_Int(1),
+      SPA_PARAM_BUFFERS_size,     SPA_POD_Int(size),
+      SPA_PARAM_BUFFERS_dataType, SPA_POD_CHOICE_FLAGS_Int(1<<SPA_DATA_MemFd)));
+
+  pw_stream_update_params(impl->raw_playback, params, 2);
+  pw_stream_update_params(impl->detection_playback, params, 2);
+}
+
+static const struct pw_stream_events capture_stream_events = {
+    PW_VERSION_STREAM_EVENTS,
+    .state_changed = on_stream_state_changed,
+    .param_changed = on_capture_param_changed,
+    .process = on_process,
+};
+
+static const struct pw_stream_events playback_stream_events = {
+    PW_VERSION_STREAM_EVENTS,
+    .state_changed = on_stream_state_changed,
+};
+
 static void signal_handler(int signo) {
   if (signo == SIGINT) {
     fprintf(stderr, "\nCaught SIGINT, exiting...\n");
