@@ -3,6 +3,7 @@
 #include <atomic>
 #include <csignal>
 #include <string>
+#include <cstdlib>
 
 extern "C" {
 #include <pipewire/pipewire.h>
@@ -33,6 +34,8 @@ std::string yoloClassesFile;
 uint32_t frame_width;
 uint32_t frame_height;
 bool detect_done = false;
+
+static struct impl* g_impl = nullptr;
 
 struct impl {
   pw_main_loop* loop;
@@ -127,6 +130,15 @@ static void on_stream_state_changed(void* data,
   }
 }
 
+static void signal_handler(int signo) {
+  if (signo == SIGINT) {
+    fprintf(stderr, "\nCaught SIGINT, exiting...\n");
+    if (g_impl != nullptr) {
+      pw_main_loop_quit(g_impl->loop);
+    }
+  }
+}
+
 int main(int argc, char* argv[]) {
   const struct spa_pod* params[1];
   uint8_t buffer[1024];
@@ -136,6 +148,8 @@ int main(int argc, char* argv[]) {
   auto impl = std::make_unique<struct impl>();
   if (impl == nullptr)
     return -1;
+
+  g_impl = impl.get();
 
   pw_init(&argc, &argv);
 
@@ -221,6 +235,8 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
+  signal(SIGINT, signal_handler);
+
   spdlog::info("Running... Press Ctrl+C to exit");
   pw_main_loop_run(impl->loop);
 
@@ -230,6 +246,8 @@ int main(int argc, char* argv[]) {
   pw_context_destroy(impl->context);
   pw_main_loop_destroy(impl->loop);
   pw_deinit();
+
+  g_impl = nullptr;
 
   return EXIT_SUCCESS;
 }
