@@ -234,20 +234,51 @@ int main(int argc, char* argv[]) {
   impl->raw_playback_info = impl->capture_info;
   impl->detection_playback_info = impl->capture_info;
 
+  spa_autofree char* link_group = spa_aprintf("camera-filter-%d", getpid());
   impl->capture = pw_stream_new(
       impl->core, "filter-capture",
-      pw_properties_new(PW_KEY_MEDIA_TYPE, "Video", PW_KEY_MEDIA_CATEGORY,
-                        "Capture", PW_KEY_MEDIA_ROLE, "Camera", NULL));
+      pw_properties_new(
+          PW_KEY_MEDIA_TYPE, "Video",
+          PW_KEY_MEDIA_CATEGORY, "Capture",
+          PW_KEY_MEDIA_ROLE, "Camera",
+          PW_KEY_NODE_DESCRIPTION, "camera sink",
+          PW_KEY_MEDIA_CLASS, "Stream/Input/Video",
+          PW_KEY_NODE_LINK_GROUP, link_group,
+          NULL));
 
   impl->raw_playback = pw_stream_new(
       impl->core, "raw-playback",
-      pw_properties_new(PW_KEY_MEDIA_TYPE, "Video", PW_KEY_MEDIA_CATEGORY,
-                        "Playback", PW_KEY_MEDIA_ROLE, "Camera", NULL));
+      pw_properties_new(
+          PW_KEY_MEDIA_TYPE, "Video",
+          PW_KEY_MEDIA_CATEGORY, "Playback",
+          PW_KEY_MEDIA_ROLE, "Camera",
+          PW_KEY_NODE_DESCRIPTION, "raw playback",
+          PW_KEY_NODE_NAME, "camera-raw-output",
+          PW_KEY_MEDIA_CLASS, "Stream/Output/Video",
+          PW_KEY_NODE_LINK_GROUP, link_group,
+          NULL));
 
   impl->detection_playback = pw_stream_new(
       impl->core, "detection-playback",
-      pw_properties_new(PW_KEY_MEDIA_TYPE, "Video", PW_KEY_MEDIA_CATEGORY,
-                        "Playback", PW_KEY_MEDIA_ROLE, "Camera", NULL));
+      pw_properties_new(
+          PW_KEY_MEDIA_TYPE, "Video",
+          PW_KEY_MEDIA_CATEGORY, "Playback",
+          PW_KEY_MEDIA_ROLE, "Camera",
+          PW_KEY_NODE_DESCRIPTION, "detection playback",
+          PW_KEY_NODE_NAME, "camera-detection-output",
+          PW_KEY_MEDIA_CLASS, "Stream/Output/Video",
+          PW_KEY_NODE_LINK_GROUP, link_group,
+          NULL));
+
+  pw_stream_add_listener(impl->capture,
+                        &impl->capture_listener,
+                        &capture_stream_events, impl.get());
+  pw_stream_add_listener(impl->raw_playback,
+                        &impl->raw_playback_listener,
+                        &playback_stream_events, impl.get());
+  pw_stream_add_listener(impl->detection_playback,
+                        &impl->detection_playback_listener,
+                        &playback_stream_events, impl.get());
 
   spa_pod_builder_init(&b, buffer, sizeof(buffer));
   params[0] =
