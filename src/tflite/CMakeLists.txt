@@ -10,7 +10,6 @@ if (NOT DEFINED TFLITE_LIBRARY)
     message(FATAL_ERROR "TFLITE_LIBRARY is not defined. Please set TFLITE_LIBRARY to the absolute path of libtensorflow-lite.so.")
 endif ()
 
-file(GLOB ABSL_LIBS "$ENV{HOME}/.local/lib/libabsl_*.so")
 #
 # tflite detection library
 #
@@ -31,5 +30,4 @@ target_link_libraries(tflite_detection
         PkgConfig::PIPEWIRE
         spdlog::spdlog
         ${TFLITE_LIBRARY} -v
-        ${ABSL_LIBS}
 )
