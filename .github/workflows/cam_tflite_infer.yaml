@@ -25,20 +25,18 @@ jobs:
         with:
           submodules: 'recursive'
           persist-credentials: false
-
-      - name: Apply patches
-        working-directory: ${{github.workspace}}
-        run: |
-          cd third_party/tensorflow
-          git apply ../../patches/0001-*.patch || echo "Patch already applied"
       
       - name: Install runtime packages
         run: |
+          # Add LLVM repository for clang-18 with full AVX-VNNI support
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main"
+          
           sudo apt-get -o DPkg::Lock::Timeout=1200 -y update
           sudo apt-get -o DPkg::Lock::Timeout=1200 -y install \
             \
-            cmake g++ git unzip \
-            clang \
+            cmake g++ git unzip wget \
+            clang-18 \
             \
             libusb-1.0-0 libgtk-3-dev libtbb-dev \
             $([[ "${{ matrix.os }}" == "ubuntu-20.04" ]] && echo "libtbb2") \
@@ -47,11 +45,18 @@ jobs:
           sudo apt-get -o DPkg::Lock::Timeout=1200 -y install \
             build-essential autoconf libtool pkg-config zlib1g-dev \
             \
-            meson ninja-build 
- 
+            meson ninja-build \
+            \
+            python3 python3-pip python3-numpy \
+            openjdk-11-jdk
+          
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100
             
           cmake --version
           gcc --version
+          clang --version
+          java -version
 
       - name: Cache opencv
         id: cache-opencv
@@ -87,32 +92,6 @@ jobs:
             -D BUILD_EXAMPLES=ON
           cmake --build ${{ github.workspace }}/build/opencv_${{ matrix.os }} -- -j4
 
-      - name: Cache grpc
-        id: cache-grpc
-        uses: actions/cache@v4
-        with:
-          key: grpc
-          path: |
-            ${{ github.workspace }}/build/staging
-
-      - name: Build grpc
-        if: steps.cache-grpc.outputs.cache-hit != 'true'
-        working-directory: ${{github.workspace}}
-        run: |
-          mkdir -p ${{github.workspace}}/build/grpc
-          CC=/usr/bin/clang CXX=/usr/bin/clang++ \
-          cmake \
-            -S ${{ github.workspace }}/third_party/grpc \
-            -B ${{ github.workspace }}/build/grpc \
-            -D gRPC_INSTALL=ON \
-            -D gRPC_BUILD_TESTS=OFF \
-            -D CMAKE_BUILD_TYPE=Release \
-            -D CMAKE_CXX_STANDARD=17 \
-            -D CMAKE_STAGING_PREFIX=${{ github.workspace }}/build/staging \
-            -D gRPC_ZLIB_PROVIDER=package
-
-          cmake --build ${{ github.workspace }}/build/grpc -- -j4
-          cmake --install ${{ github.workspace }}/build/grpc
           
       - name: Cache pipewire
         id: cache-pipewire
@@ -132,31 +111,6 @@ jobs:
           meson compile -C build/pipewire
           meson install -C build/pipewire
 
-      - name: Cache abseil-cpp
-        id: cache-abseil-cpp
-        uses: actions/cache@v4
-        with:
-          key: abseil-cpp
-          path: |
-            ${{ github.workspace }}/build/staging
-
-      - name: Build abseil-cpp
-        if: steps.cache-abseil-cpp.outputs.cache-hit != 'true'
-        working-directory: ${{github.workspace}}
-        run: |
-          mkdir -p ${{github.workspace}}/build/abseil-cpp
-          CC=/usr/bin/clang CXX=/usr/bin/clang++ \
-          cmake \
-            -S ${{ github.workspace }}/third_party/abseil-cpp \
-            -B ${{ github.workspace }}/build/abseil-cpp \
-            -D BUILD_SHARED_LIBS=ON \
-            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-            -D CMAKE_BUILD_TYPE=Release \
-            -D CMAKE_STAGING_PREFIX=${{ github.workspace }}/build/staging \
-
-          cmake --build ${{ github.workspace }}/build/abseil-cpp -- -j4
-          cmake --install ${{ github.workspace }}/build/abseil-cpp
-
       - name: Cache tensorflow
         id: cache-tensorflow
         uses: actions/cache@v4
@@ -169,21 +123,38 @@ jobs:
         if: steps.cache-tensorflow.outputs.cache-hit != 'true'
         working-directory: ${{github.workspace}}
         run: |
-          mkdir -p ${{github.workspace}}/build/tensorflow
-          CC=/usr/bin/clang CXX=/usr/bin/clang++ \
-          cmake \
-            -S ${{ github.workspace }}/third_party/tensorflow/tensorflow/lite \
-            -B ${{ github.workspace }}/build/tensorflow \
-            -G Ninja \
-            -D TFLITE_ENABLE_GPU=ON \
-            -D TFLITE_ENABLE_XNNPACK=ON \
-            -D BUILD_SHARED_LIBS=ON \
-            -D FETCHCONTENT_FULLY_DISCONNECTED=OFF \
-            -D CMAKE_C_COMPILER=/usr/bin/clang \
-            -D CMAKE_CXX_COMPILER=/usr/bin/clang++ \
-            -D CMAKE_STAGING_PREFIX=${{ github.workspace }}/build/staging \
-            -D ABSL_PROPAGATE_CXX_STD=ON \
-            -D CMAKE_POLICY_DEFAULT_CMP0135=NEW \
-            -D CMAKE_PREFIX_PATH=${{ github.workspace }}/build/staging
+          STAGING_PREFIX="${{ github.workspace }}/build/staging"
+          mkdir -p "${STAGING_PREFIX}"
+          
+          # Clone directly into staging
+          git clone https://github.com/tensorflow/tensorflow.git "${STAGING_PREFIX}/tensorflow"
+          cd "${STAGING_PREFIX}/tensorflow"
+          git checkout v2.19.0
+          
+          wget https://github.com/bazelbuild/bazelisk/releases/download/v1.27.0/bazelisk-linux-amd64
+          chmod +x ./bazelisk-linux-amd64
+          
+          export CC=/usr/bin/clang-18
+          export CXX=/usr/bin/clang++-18
+          export CC_OPT_FLAGS="-march=native"
+          export USE_DEFAULT_PYTHON_LIB_PATH=1
+          export TF_NEED_JEMALLOC=1
+          export TF_NEED_OPENCL_SYCL=0
+          export TF_NEED_CUDA=0
+          export TF_DOWNLOAD_CLANG=0
+          export TF_SET_ANDROID_WORKSPACE=0
+          ./configure
+          
+          # Clean bazel cache to avoid using cached toolchain with wrong compiler
+          ./bazelisk-linux-amd64 clean --expunge
+          
+          ./bazelisk-linux-amd64 build //tensorflow/lite:libtensorflowlite.so \
+            -c opt \
+            --repo_env=CC=/usr/bin/clang-18 \
+            --repo_env=CXX=/usr/bin/clang++-18 \
+            --action_env=CC=/usr/bin/clang-18 \
+            --action_env=CXX=/usr/bin/clang++-18 \
+            --repo_env=BAZEL_COMPILER=/usr/bin/clang-18
 
-          ninja -C ${{ github.workspace }}/build/tensorflow -j 30
+          mkdir -p "${STAGING_PREFIX}/lib"          
+          cp bazel-bin/tensorflow/lite/libtensorflowlite.so "${STAGING_PREFIX}/lib/"
