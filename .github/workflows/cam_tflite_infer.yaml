@@ -112,21 +112,27 @@ jobs:
         if: steps.cache-tensorflow.outputs.cache-hit != 'true'
         working-directory: ${{github.workspace}}
         run: |
-          mkdir -p ${{github.workspace}}/build/tensorflow
-          CC=/usr/bin/clang CXX=/usr/bin/clang++ \
-          cmake \
-            -S ${{ github.workspace }}/third_party/tensorflow/tensorflow/lite \
-            -B ${{ github.workspace }}/build/tensorflow \
-            -G Ninja \
-            -D TFLITE_ENABLE_GPU=ON \
-            -D TFLITE_ENABLE_XNNPACK=ON \
-            -D BUILD_SHARED_LIBS=ON \
-            -D FETCHCONTENT_FULLY_DISCONNECTED=OFF \
-            -D CMAKE_C_COMPILER=/usr/bin/clang \
-            -D CMAKE_CXX_COMPILER=/usr/bin/clang++ \
-            -D CMAKE_STAGING_PREFIX=${{ github.workspace }}/build/staging \
-            -D ABSL_PROPAGATE_CXX_STD=ON \
-            -D CMAKE_POLICY_DEFAULT_CMP0135=NEW \
-            -D CMAKE_PREFIX_PATH=${{ github.workspace }}/build/staging
+          STAGING_PREFIX="${{ github.workspace }}/build/staging"
+          mkdir -p "${STAGING_PREFIX}"
+          
+          # Clone directly into staging
+          git clone https://github.com/tensorflow/tensorflow.git "${STAGING_PREFIX}/tensorflow"
+          cd "${STAGING_PREFIX}/tensorflow"
+          git checkout v2.19.0
+          
+          wget https://github.com/bazelbuild/bazelisk/releases/download/v1.27.0/bazelisk-linux-amd64
+          chmod +x ./bazelisk-linux-amd64
+          
+          export CC_OPT_FLAGS="-march=native"
+          export USE_DEFAULT_PYTHON_LIB_PATH=1
+          export TF_NEED_JEMALLOC=1
+          export TF_NEED_OPENCL_SYCL=0
+          export TF_NEED_CUDA=0
+          export TF_DOWNLOAD_CLANG=0
+          export TF_SET_ANDROID_WORKSPACE=0
+          ./configure
+          
+          ./bazelisk-linux-amd64 build //tensorflow/lite:libtensorflowlite.so -c opt
 
-          ninja -C ${{ github.workspace }}/build/tensorflow -j 30
+          mkdir -p "${STAGING_PREFIX}/lib"          
+          cp bazel-bin/tensorflow/lite/libtensorflowlite.so "${STAGING_PREFIX}/lib/"
