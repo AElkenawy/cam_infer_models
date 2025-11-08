@@ -81,32 +81,6 @@ jobs:
             -D BUILD_EXAMPLES=ON
           cmake --build ${{ github.workspace }}/build/opencv_${{ matrix.os }} -- -j4
 
-      - name: Cache grpc
-        id: cache-grpc
-        uses: actions/cache@v4
-        with:
-          key: grpc
-          path: |
-            ${{ github.workspace }}/build/staging
-
-      - name: Build grpc
-        if: steps.cache-grpc.outputs.cache-hit != 'true'
-        working-directory: ${{github.workspace}}
-        run: |
-          mkdir -p ${{github.workspace}}/build/grpc
-          CC=/usr/bin/clang CXX=/usr/bin/clang++ \
-          cmake \
-            -S ${{ github.workspace }}/third_party/grpc \
-            -B ${{ github.workspace }}/build/grpc \
-            -D gRPC_INSTALL=ON \
-            -D gRPC_BUILD_TESTS=OFF \
-            -D CMAKE_BUILD_TYPE=Release \
-            -D CMAKE_CXX_STANDARD=17 \
-            -D CMAKE_STAGING_PREFIX=${{ github.workspace }}/build/staging \
-            -D gRPC_ZLIB_PROVIDER=package
-
-          cmake --build ${{ github.workspace }}/build/grpc -- -j4
-          cmake --install ${{ github.workspace }}/build/grpc
           
       - name: Cache pipewire
         id: cache-pipewire
