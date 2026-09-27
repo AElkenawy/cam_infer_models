@@ -20,7 +20,7 @@ add_library(tflite_detection STATIC
 
 target_include_directories(tflite_detection PRIVATE 
         ${TFLITE_ROOT}
-        ${TFLITE_ROOT}/tensorflow/lite/build/flatbuffers/include
+        ${TFLITE_ROOT}/tflite_build/flatbuffers/include/
 )
 
 target_link_libraries(tflite_detection
